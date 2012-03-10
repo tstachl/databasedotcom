@@ -29,9 +29,92 @@ module Databasedotcom
       
       # Set attributes of this object, from a hash, in bulk
       def attributes=(attrs)
+        multi_parameter_attributes = []
+        
         attrs.each do |key, value|
-          self.send("#{key}=", value)
+          if key.include?("(")
+            multi_parameter_attributes << [ key, value ]
+          elsif respond_to?("#{key}=")
+            self.send("#{key}=", value)
+          else
+            raise(ArgumentError, "unknown attribute: #{key}")
+          end
         end
+        
+        self.assign_multiparameter_attributes(multi_parameter_attributes)
+      end
+      
+      def assign_multiparameter_attributes(pairs)
+        self.execute_callstack_for_multiparameter_attributes(
+          self.extract_callstack_for_multiparameter_attributes(pairs)
+        )
+      end
+      
+      def instantiate_time_object(name, values)
+        if self.class.send(:create_time_zone_conversion_attribute?, name, column_for_attribute(name))
+          Time.zone.local(*values)
+        else
+          Time.time_with_datetime_fallback(@@default_timezone, *values)
+        end
+      end
+      
+      def execute_callstack_for_multiparameter_attributes(callstack)
+        errors = []
+        callstack.each do |name, values_with_empty_parameters|
+          begin
+            type = self.class.type_map[name][:type]
+            # in order to allow a date to be set without a year, we must keep the empty values.
+            # Otherwise, we wouldn't be able to distinguish it from a date with an empty day.
+            values = values_with_empty_parameters.reject { |v| v.nil? }
+
+            if values.empty?
+              self.send(name + "=", nil)
+            else
+
+              value = if "datetime" == type 
+                self.instantiate_time_object(name, values)
+              elsif "date" == type
+                begin
+                  values = values_with_empty_parameters.collect do |v| v.nil? ? 1 : v end
+                  Date.new(*values)
+                rescue ArgumentError => ex # if Date.new raises an exception on an invalid date
+                  self.instantiate_time_object(name, values).to_date # we instantiate Time object and convert it back to a date thus using Time's logic in handling invalid dates
+                end
+              end
+
+              self.send(name + "=", value)
+            end
+          rescue => ex
+            errors << ::ActiveRecord::AttributeAssignmentError.new("error on assignment #{values.inspect} to #{name}", ex, name) if defined?(::ActiveRecord)
+          end
+        end
+        unless errors.empty?
+          raise errors.first
+          raise ::ActiveRecord::MultiparameterAssignmentErrors.new(errors), "#{errors.size} error(s) on assignment of multiparameter attributes" if defined?(::ActiveRecord)
+        end
+      end
+      
+      def extract_callstack_for_multiparameter_attributes(pairs)
+        attributes = { }
+
+        for pair in pairs
+          multiparameter_name, value = pair
+          attribute_name = multiparameter_name.split("(").first
+          attributes[attribute_name] = [] unless attributes.include?(attribute_name)
+
+          parameter_value = value.empty? ? nil : self.type_cast_attribute_value(multiparameter_name, value)
+          attributes[attribute_name] << [ self.find_parameter_position(multiparameter_name), parameter_value ]
+        end
+
+        attributes.each { |name, values| attributes[name] = values.sort_by{ |v| v.first }.collect { |v| v.last } }
+      end
+
+      def type_cast_attribute_value(multiparameter_name, value)
+        multiparameter_name =~ /\([0-9]*([if])\)/ ? value.send("to_" + $1) : value
+      end
+
+      def find_parameter_position(multiparameter_name)
+        multiparameter_name.scan(/\(([0-9]*).*\)/).first.first
       end
 
       # Returns true if the object has been persisted in the Force.com database.
@@ -75,10 +158,20 @@ module Databasedotcom
       #    c.update_attributes {"Color" => "Blue", "Year" => "2012"}
       def update_attributes(new_attrs)
         if self.client.update(self.class, self.Id, new_attrs)
+          multi_parameter_attributes = []
+          
           new_attrs = new_attrs.is_a?(Hash) ? new_attrs : JSON.parse(new_attrs)
-          new_attrs.each do |attr, value|
-            self.send("#{attr}=", value)
+          new_attrs.each do |key, value|
+            if key.include?("(")
+              multi_parameter_attributes << [ key, value ]
+            elsif respond_to?("#{key}=")
+              self.send("#{key}=", value)
+            else
+              raise(ArgumentError, "unknown attribute: #{key}")
+            end
           end
+          
+          self.assign_multiparameter_attributes(multi_parameter_attributes)
         end
         self
       end

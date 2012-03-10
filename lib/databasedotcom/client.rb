@@ -146,6 +146,16 @@ module Databasedotcom
         raise SalesForceError.new(result)
       end
     end
+    
+    # Returns an Array of Hashes listing the name and label for every flow available. Raises SalesForceError if an error occurs.
+    def list_flows
+      result = http_get("/services/flow/availableFlows")
+      if result.is_a?(Net::HTTPOK)
+        JSON.parse(result.body)
+      elsif result.is_a?(Net::HTTPBadRequest)
+        raise SalesForceError.new(result)
+      end
+    end
 
     # Dynamically defines classes for Force.com class names.  _classnames_ can be a single String or an Array of Strings.  Returns the class or Array of classes defined.
     #
@@ -286,7 +296,7 @@ module Databasedotcom
     # HTTPSuccess- raises SalesForceError otherwise.
     def http_get(path, parameters={}, headers={})
       with_encoded_path_and_checked_response(path, parameters) do |encoded_path|
-        https_request.get(encoded_path, {"Authorization" => "OAuth #{self.oauth_token}"}.merge(headers))
+        https_request.get(encoded_path, {"Authorization" => "OAuth #{self.oauth_token}", "Accept" => "application/json"}.merge(headers))
       end
     end
 
@@ -296,7 +306,7 @@ module Databasedotcom
     # HTTPSuccess- raises SalesForceError otherwise.
     def http_delete(path, parameters={}, headers={})
       with_encoded_path_and_checked_response(path, parameters, {:expected_result_class => Net::HTTPNoContent}) do |encoded_path|
-        https_request.delete(encoded_path, {"Authorization" => "OAuth #{self.oauth_token}"}.merge(headers))
+        https_request.delete(encoded_path, {"Authorization" => "OAuth #{self.oauth_token}", "Accept" => "application/json"}.merge(headers))
       end
     end
 
@@ -305,7 +315,7 @@ module Databasedotcom
     # headers specified in _headers_.  Returns the HTTPResult if it is of type HTTPSuccess- raises SalesForceError otherwise.
     def http_post(path, data=nil, parameters={}, headers={})
       with_encoded_path_and_checked_response(path, parameters, {:data => data}) do |encoded_path|
-        https_request.post(encoded_path, data, {"Content-Type" => data ? "application/json" : "text/plain", "Authorization" => "OAuth #{self.oauth_token}"}.merge(headers))
+        https_request.post(encoded_path, data, {"Content-Type" => data ? "application/json" : "text/plain", "Authorization" => "OAuth #{self.oauth_token}", "Accept" => "application/json"}.merge(headers))
       end
     end
 
@@ -314,7 +324,7 @@ module Databasedotcom
     # headers specified in _headers_.  Returns the HTTPResult if it is of type HTTPSuccess- raises SalesForceError otherwise.
     def http_patch(path, data=nil, parameters={}, headers={})
       with_encoded_path_and_checked_response(path, parameters, {:data => data}) do |encoded_path|
-        https_request.send_request("PATCH", encoded_path, data, {"Content-Type" => data ? "application/json" : "text/plain", "Authorization" => "OAuth #{self.oauth_token}"}.merge(headers))
+        https_request.send_request("PATCH", encoded_path, data, {"Content-Type" => data ? "application/json" : "text/plain", "Authorization" => "OAuth #{self.oauth_token}", "Accept" => "application/json"}.merge(headers))
       end
     end
 
@@ -324,7 +334,7 @@ module Databasedotcom
     # Returns the HTTPResult if it is of type HTTPSuccess- raises SalesForceError otherwise.
     def http_multipart_post(path, parts, parameters={}, headers={})
       with_encoded_path_and_checked_response(path, parameters) do |encoded_path|
-        https_request.request(Net::HTTP::Post::Multipart.new(encoded_path, parts, {"Authorization" => "OAuth #{self.oauth_token}"}.merge(headers)))
+        https_request.request(Net::HTTP::Post::Multipart.new(encoded_path, parts, {"Authorization" => "OAuth #{self.oauth_token}", "Accept" => "application/json"}.merge(headers)))
       end
     end
 

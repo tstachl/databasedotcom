@@ -4,7 +4,7 @@ module Databasedotcom
   module Chatter
     # Superclasses all Chatter resources except feeds. Some methods may not be supported by the Force.com API for certain subclasses.
     class Record
-      attr_reader :raw_hash, :name, :id, :url, :type, :client
+      attr_accessor :raw_hash, :name, :id, :url, :type, :client
 
       # Create a new record from the returned JSON response of an API request. Sets the client, name, id, url, and type attributes. Saves the raw response as +raw_hash+.
       def initialize(client, response)
