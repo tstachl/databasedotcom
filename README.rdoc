@@ -156,6 +156,25 @@ You can easily access Chatter feeds, group, conversations, etc.:
 
 See the documentation[http://rubydoc.info/github/heroku/databasedotcom/master/frames] for full details.
 
+== Using the Cache
+It's fairly easy to enable caching.
+
+    client = Databasedotcom::Client.new :cache => true, :client_id => "sponge", :client_secret => "bob"
+
+Remember, the cache uses Dalli which requires memcached 1.4+. You can check the version with memcached -h. Please note that memcached that Mac OS X Snow Leopard ships with is 1.2.8 and won't work. Install 1.4.x using Homebrew with
+
+    brew install memcached
+
+You can verify your installation using this piece of code:
+
+    gem install dalli
+    
+    require 'dalli'
+    dc = Dalli::Client.new('localhost:11211')
+    dc.set('abc', 123)
+    value = dc.get('abc')
+
+
 = License
 
 This gem is licensed under the MIT License.
