@@ -2,6 +2,8 @@ require 'net/https'
 require 'json'
 require 'net/http/post/multipart'
 require 'date'
+require 'dalli'
+require 'digest/md5'
 
 module Databasedotcom
   # Interface for operating the Force.com REST API
@@ -36,6 +38,8 @@ module Databasedotcom
     attr_accessor :ca_file
     # The SSL verify mode configured for this instance, if any
     attr_accessor :verify_mode
+    # If true, use Dalli for memcached
+    attr_accessor :cache
 
     # Returns a new client object. _options_ can be one of the following
     #
@@ -85,6 +89,7 @@ module Databasedotcom
       end
       
       self.debugging = ENV['DATABASEDOTCOM_DEBUGGING'] || @options[:debugging]
+      self.cache = ENV['DATABASEDOTCOM_CACHE'] || @options[:cache]
       self.version = ENV['DATABASEDOTCOM_VERSION'] || @options[:version]
       self.version = self.version.to_s if self.version
       self.sobject_module = ENV['DATABASEDOTCOM_SOBJECT_MODULE'] || @options[:sobject_module]
@@ -286,7 +291,10 @@ module Databasedotcom
     # HTTPSuccess- raises SalesForceError otherwise.
     def http_get(path, parameters={}, headers={})
       with_encoded_path_and_checked_response(path, parameters) do |encoded_path|
-        https_request.get(encoded_path, common_headers.merge(headers))
+        response = dalli_client.get(Digest::MD5.hexdigest("databasedotcom:#{encoded_path}")) if self.cache
+        response = https_request.get(encoded_path, common_headers.merge(headers)) unless response
+        dalli_client.set(Digest::MD5.hexdigest("databasedotcom:#{encoded_path}"), response) if self.cache
+        response
       end
     end
 
@@ -385,6 +393,11 @@ module Databasedotcom
         http.ca_file = self.ca_file if self.ca_file
         http.verify_mode = self.verify_mode if self.verify_mode
       end
+    end
+    
+    def dalli_client
+      # Compress data on its way to the cache, cache entries expire in 1 hour
+      @dalli_client ||= Dalli::Client.new(nil, :compress => true, :expires_in => 3600)
     end
 
     def encode_path_with_params(path, parameters={})
